@@ -71,7 +71,7 @@ as a recipe for learning submodules and programming.
 
 ### 🔧 Prerequisites
 
-- C++17 or newer
+- C++20 or newer
 - `g++` or `clang++`
 - `make`
 
