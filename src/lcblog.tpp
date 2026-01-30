@@ -153,11 +153,17 @@ void LCBLog::logToStream(std::ostream& stream,
                          T&&            t,
                          Args&&...      args)
 {
-    // Build padded level tag
-    std::string levelStr = ::logLevelToString(level);
-    constexpr int LOG_LEVEL_WIDTH = 5;
-    if (levelStr.size() < LOG_LEVEL_WIDTH) {
-        levelStr.append(LOG_LEVEL_WIDTH - levelStr.size(), ' ');
+    const bool journaldEnabled =
+        useJournald_.load(std::memory_order_acquire);
+    std::string levelStr;
+    if (!journaldEnabled)
+    {
+        levelStr = ::logLevelToString(level);
+        constexpr int LOG_LEVEL_WIDTH = 5;
+        if (levelStr.size() < LOG_LEVEL_WIDTH)
+        {
+            levelStr.append(LOG_LEVEL_WIDTH - levelStr.size(), ' ');
+        }
     }
 
     // Prepare conversion lambda
@@ -197,21 +203,35 @@ void LCBLog::logToStream(std::ostream& stream,
         if (!firstLine) {
             stream << std::endl;
         }
-        if (printTimestamps) {
+        if (!journaldEnabled && printTimestamps)
+        {
             stream << getStamp() << "\t";
         }
         crush(line);
-        stream << "[" << levelStr << "] " << line;
+        if (journaldEnabled)
+        {
+            stream << line;
+        }
+        else
+        {
+            stream << "[" << levelStr << "] " << line;
+        }
         firstLine  = false;
         printedAny = true;
     }
 
     // Emit an empty entry if nothing was printed
-    if (!printedAny) {
-        if (printTimestamps) {
+    if (!printedAny)
+    {
+        if (!journaldEnabled && printTimestamps)
+        {
             stream << getStamp() << "\t";
         }
-        stream << "[" << levelStr << "] ";
+
+        if (!journaldEnabled)
+        {
+            stream << "[" << levelStr << "] ";
+        }
     }
 
     // Write final newline

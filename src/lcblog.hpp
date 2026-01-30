@@ -177,6 +177,9 @@ public:
      *
      * When enabled, each line is prefixed with a UTC timestamp.
      *
+     * If journald logging is enabled, timestamps are not prepended and
+     * journald provides its own timestamp metadata.
+     *
      * @param enable True to include timestamps, false to omit them.
      */
     void enableTimestamps(bool enable);
@@ -186,6 +189,9 @@ public:
      *
      * When enabled, log entries are sent via libsystemd instead of
      * writing to the configured output streams.
+     *
+     * When journald is active, LCBLog does not prepend its own timestamp
+     * or textual log level tag; journald provides those fields.
      *
      * @param enable True to send logs to journald, false to use streams.
      */
