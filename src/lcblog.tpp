@@ -52,6 +52,43 @@
 #include <cctype>
 
 /**
+ * @brief Emit a one-time banner describing the active logging backend.
+ *
+ * This banner is emitted once per process lifetime and is intended
+ * to help confirm whether logging is going to streams or journald.
+ */
+inline void LCBLog::emitBackendBannerIfNeeded_()
+{
+    bool expected = false;
+    if (!backendBannerLogged_.compare_exchange_strong(
+            expected, true, std::memory_order_acq_rel))
+    {
+        return;
+    }
+
+    const bool journaldEnabled = useJournald_.load(std::memory_order_acquire);
+    const std::string backend = journaldEnabled ? "journald" : "streams";
+
+    std::ostringstream oss;
+    logToStream(oss, LogLevel::INFO, "LCBLog backend:", backend);
+
+    auto entry = std::make_unique<LogEntry>();
+    entry->level = LogLevel::INFO;
+    entry->msg   = std::move(oss.str());
+    entry->dest  = ::LogEntry::Out;
+
+    {
+        std::lock_guard<std::mutex> lock(outMtx_);
+        if (outQueue_.size() >= this->maxQueueSize_)
+        {
+            outQueue_.pop_front();
+        }
+        outQueue_.push_back(std::move(entry));
+    }
+    outCv_.notify_one();
+}
+
+/**
  * @brief Enqueue a formatted log message for asynchronous processing.
  *
  * This template formats the provided arguments into a single string,
@@ -65,6 +102,8 @@
 template<typename... Args>
 void LCBLog::log(LogLevel level, Args&&... args)
 {
+    emitBackendBannerIfNeeded_();
+
     if (!shouldLog(level)) {
         return;
     }
@@ -73,7 +112,8 @@ void LCBLog::log(LogLevel level, Args&&... args)
     logToStream(oss, level, std::forward<Args>(args)...);
 
     auto entry = std::make_unique<LogEntry>();
-    entry->msg  = std::move(oss.str());
+    entry->level = level;
+    entry->msg   = std::move(oss.str());
     entry->dest = (level >= LogLevel::ERROR
                        ? ::LogEntry::Err
                        : ::LogEntry::Out);

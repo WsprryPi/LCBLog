@@ -38,6 +38,18 @@
 #include <algorithm>
 #include <iostream>
 #include <regex>
+
+#if defined(__has_include)
+#  if __has_include(<systemd/sd-journal.h>)
+#    include <systemd/sd-journal.h>
+#    define LCBLOG_HAS_JOURNALD 1
+#  else
+#    define LCBLOG_HAS_JOURNALD 0
+#  endif
+#else
+#  define LCBLOG_HAS_JOURNALD 0
+#endif
+
 #include <thread>
 
 /**
@@ -64,6 +76,80 @@ std::string logLevelToString(LogLevel level)
         return "UNKNOWN";
     }
 }
+
+namespace {
+
+int logLevelToJournaldPriority(LogLevel level)
+{
+    switch (level)
+    {
+    case LogLevel::DEBUG:
+        return 7; // Debug
+    case LogLevel::INFO:
+        return 6; // Informational
+    case LogLevel::WARN:
+        return 4; // Warning
+    case LogLevel::ERROR:
+        return 3; // Error
+    case LogLevel::FATAL:
+        return 2; // Critical
+    default:
+        return 5; // Notice
+    }
+}
+
+#if LCBLOG_HAS_JOURNALD
+void sendToJournald(int priority, const std::string &ident, const std::string &line)
+{
+    if (ident.empty())
+    {
+        (void)sd_journal_print(priority, "%s", line.c_str());
+        return;
+    }
+
+    (void)sd_journal_send(
+        "PRIORITY=%d", priority,
+        "SYSLOG_IDENTIFIER=%s", ident.c_str(),
+        "MESSAGE=%s", line.c_str(),
+        nullptr);
+}
+#endif
+
+void sendMessageLinesToJournald(int priority,
+                               const std::string &ident,
+                               const std::string &msg)
+{
+#if !LCBLOG_HAS_JOURNALD
+    (void)priority;
+    (void)ident;
+    (void)msg;
+#else
+    size_t start = 0;
+    while (start < msg.size())
+    {
+        size_t end = msg.find('\n', start);
+        if (end == std::string::npos)
+        {
+            end = msg.size();
+        }
+
+        if (end > start)
+        {
+            std::string line = msg.substr(start, end - start);
+            sendToJournald(priority, ident, line);
+        }
+
+        if (end == msg.size())
+        {
+            break;
+        }
+        start = end + 1;
+    }
+#endif
+}
+
+} // namespace
+
 
 /**
  * @brief Constructs the logger and starts asynchronous worker threads.
@@ -176,54 +262,106 @@ void LCBLog::workerLoop(std::deque<std::unique_ptr<LogEntry>> &queue,
                         std::condition_variable &cv,
                         std::ostream &stream)
 {
-    std::vector<std::string> batch;
-    batch.reserve(batchSize_); // Allocate buffer for batch of log messages
+    struct BatchItem
+    {
+        LogLevel level;
+        std::string msg;
+    };
 
-    auto lastFlush = std::chrono::steady_clock::now(); // Initialize last flush time
+    std::vector<BatchItem> batch;
+    batch.reserve(batchSize_);
 
-    // Continue until shutdown is signaled and queue is empty
+    auto lastFlush = std::chrono::steady_clock::now();
+
     while (!done_.load(std::memory_order_acquire) || !queue.empty())
     {
+        bool journaldEnabled = useJournald_.load(std::memory_order_acquire);
+
         {
             std::unique_lock<std::mutex> lk(mtx);
-            // Wake when new data arrives or flush interval elapses
-            cv.wait_for(lk, flushInterval_, [&]
-                        { return done_.load(std::memory_order_acquire) || !queue.empty(); });
+            if (journaldEnabled)
+            {
+                cv.wait(lk, [&] {
+                    return done_.load(std::memory_order_acquire) || !queue.empty();
+                });
+            }
+            else
+            {
+                cv.wait_for(lk, flushInterval_, [&] {
+                    return done_.load(std::memory_order_acquire) || !queue.empty();
+                });
+            }
 
-            // Move up to batchSize_ messages into the local buffer
             while (!queue.empty() && batch.size() < batchSize_)
             {
-                batch.emplace_back(std::move(queue.front()->msg));
+                auto entry = std::move(queue.front());
                 queue.pop_front();
+
+                BatchItem item;
+                item.level = entry->level;
+                item.msg   = std::move(entry->msg);
+                batch.push_back(std::move(item));
             }
         }
 
-        // Write batched messages to the output stream
-        for (auto &msg : batch)
+        if (journaldEnabled)
         {
-            stream << msg;
+            std::string ident;
+            {
+                std::lock_guard<std::mutex> lock(logMutex);
+                ident = journaldIdent_;
+            }
+
+            for (auto &item : batch)
+            {
+                const int prio = logLevelToJournaldPriority(item.level);
+                sendMessageLinesToJournald(prio, ident, item.msg);
+            }
+        }
+        else
+        {
+            for (auto &item : batch)
+            {
+                stream << item.msg;
+            }
+
+            auto now = std::chrono::steady_clock::now();
+            if (batch.size() >= batchSize_ || now - lastFlush >= flushInterval_)
+            {
+                stream << std::flush;
+                lastFlush = now;
+            }
         }
 
-        // Flush if the batch is full or the flush interval has elapsed
-        auto now = std::chrono::steady_clock::now();
-        if (batch.size() >= batchSize_ || now - lastFlush >= flushInterval_)
-        {
-            stream << std::flush;
-            lastFlush = now;
-        }
-
-        batch.clear(); // Clear the buffer for the next batch
+        batch.clear();
     }
 
-    // Drain any remaining messages after shutdown
     {
         std::lock_guard<std::mutex> lk(mtx);
         while (!queue.empty())
         {
-            stream << queue.front()->msg;
+            if (useJournald_.load(std::memory_order_acquire))
+            {
+                std::string ident;
+                {
+                    std::lock_guard<std::mutex> lock(logMutex);
+                    ident = journaldIdent_;
+                }
+
+                const int prio = logLevelToJournaldPriority(queue.front()->level);
+                sendMessageLinesToJournald(prio, ident, queue.front()->msg);
+            }
+            else
+            {
+                stream << queue.front()->msg;
+            }
             queue.pop_front();
         }
-        stream << std::flush;
+
+        if (!useJournald_.load(std::memory_order_acquire))
+        {
+            stream << std::flush;
+        }
     }
 }
 
@@ -255,6 +393,24 @@ void LCBLog::enableTimestamps(bool enable)
     std::lock_guard<std::mutex> lock(logMutex);
     printTimestamps = enable;
 }
+
+void LCBLog::enableJournald(bool enable)
+{
+    useJournald_.store(enable && (LCBLOG_HAS_JOURNALD != 0),
+                      std::memory_order_release);
+    if (useJournald_.load(std::memory_order_acquire))
+    {
+        outCv_.notify_all();
+        errCv_.notify_all();
+    }
+}
+
+void LCBLog::setJournaldIdentifier(const std::string &ident)
+{
+    std::lock_guard<std::mutex> lock(logMutex);
+    journaldIdent_ = ident;
+}
+
 
 /**
  * @brief Determine if a message meets the current log level threshold.

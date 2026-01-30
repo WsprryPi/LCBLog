@@ -12,172 +12,98 @@
 - [📂 Project Structure](#-project-structure)
 - [🛠️ Installation \& Compilation](#️-installation--compilation)
   - [🔧 Prerequisites](#-prerequisites)
-  - [💻 Building the Library (`liblcblog.a`)](#-building-the-library-liblcbloga)
-  - [🔍 Running Tests](#-running-tests)
-  - [🛠 Debug Build (with symbols)](#-debug-build-with-symbols)
-  - [🧹 Clean Build Artifacts](#-clean-build-artifacts)
-  - [🔎 Static Code Analysis (`cppcheck`)](#-static-code-analysis-cppcheck)
-- [✏️ Usage Example](#️-usage-example)
+  - [💻 Building](#-building)
+- [📓 systemd / journald Integration](#-systemd--journald-integration)
+  - [Log Level Mapping](#log-level-mapping)
 - [📜 License](#-license)
-- [👨‍💻 Author](#-author)
-- [⭐ Contributing](#-contributing)
 
+---
 
 ## 📌 Overview
 
-**LCBLog** is a flexible and thread-safe C++ logging library that provides:
+**LCBLog** is a flexible and thread-safe C++ logging library designed primarily for long-running
+daemon-style applications. It provides:
 
 - Multiple **log levels** (`DEBUG`, `INFO`, `WARN`, `ERROR`, `FATAL`)
 - **Thread safety** using `std::mutex`
-- **Non-blocking** using internal thrteads and queues
-- **Timestamped logs** (optional)
-- **Customizable output streams** (supports redirection)
+- **Non-blocking logging** using internal worker threads and queues
+- Optional **timestamps**
 - **Multi-line message handling**
-- **Static library (`liblcblog.a`)** for easy integration
+- Pluggable backends:
+  - Standard output/error streams
+  - Native **systemd journald** integration
 
 ---
 
 ## 🚀 Features
 
-- [✔] **Log Level Filtering** – Messages below the set log level are ignored.
-- [✔] **Thread Safety** – Multiple threads can log safely using `std::mutex`.
-- [✔] **Customizable Output** – Logs can be redirected to different streams.
-- [✔] **Performance Optimized** – Efficient whitespace handling in log messages.
-- [✔] **Automatic Formatting** – Ensures aligned and readable log output.
+- [✔] Log level filtering
+- [✔] Thread-safe, async logging
+- [✔] stdout/stderr or journald backends
+- [✔] Explicit journald priority mapping
+- [✔] One-time startup backend banner
 
 ---
 
 ## 📂 Project Structure
 
-``` text
+```text
 📁 LCBLog
-├─ 📜 README.md     # Project documentation
-└─ 📜 LICENSE       # MIT License
-└─| src
-  |-- 📜 lcblog.hpp # Header file (public API)
-  |-- 📜 lcblog.cpp # Implementation file
-  |-- 📜 lcblog.tpp # Template definitions
-  |-- 📜 main.cpp   # Test executable (test target only)
-  └── 📜 Makefile   # Build system
+├─ README.md
+├─ LICENSE
+└─ src
+   ├─ lcblog.hpp
+   ├─ lcblog.cpp
+   ├─ lcblog.tpp
+   ├─ main.cpp
+   └─ Makefile
 ```
 
 ---
 
 ## 🛠️ Installation & Compilation
 
-This library is intended to be included as a submodule within a project that requires logging.
-These instructions apply to stand-alone compilation and testing, and are not intended to serve
-as a recipe for learning submodules and programming.
-
 ### 🔧 Prerequisites
 
-- C++20 or newer
-- `g++` or `clang++`
-- `make`
+- C++20
+- make
+- Optional: libsystemd-dev
 
-### 💻 Building the Library (`liblcblog.a`)
+### 💻 Building
 
-``` bash
+```bash
 make
 ```
 
-This will compile lcblog.cpp and create liblcblog.a.
-
-### 🔍 Running Tests
-
-To compile and run the test executable:
-
-``` bash
-make test
-./lcblog_test
-```
-
-### 🛠 Debug Build (with symbols)
-
-``` bash
-make debug
-```
-
-### 🧹 Clean Build Artifacts
-
-``` bash
-make clean
-```
-
 ---
 
-### 🔎 Static Code Analysis (`cppcheck`)
+## 📓 systemd / journald Integration
 
-You can check the code for potential issues using:
+Install systemd headers:
 
-``` bash
-make lint
+```bash
+sudo apt install libsystemd-dev
 ```
 
-If cppcheck is not installed, the Makefile will prompt you to install it.
+Enable journald:
 
----
-
-## ✏️ Usage Example
-
-Include & Initialize LCBLog
-
-``` bash
-#include "lcblog.hpp"
-
-int main() {
-    LCBLog logger; // Uses std::cout (info) and std::cerr (errors) by default
-
-    logger.setLogLevel(DEBUG);  // Set log level to DEBUG
-    logger.enableTimestamps(true); // Enable timestamps in logs
-
-    logger.logS(INFO, "Application started.");
-    logger.logS(DEBUG, "Debugging enabled.");
-    logger.logE(ERROR, "An error occurred.");
-
-    return 0;
-}
+```cpp
+logger.enableJournald(true);
+logger.setJournaldIdentifier("wsprrypi");
 ```
 
-Expected Output (with timestamps enabled):
+### Log Level Mapping
 
-``` text
-2025-02-08 12:34:56 UTC [INFO ] Application started.
-2025-02-08 12:34:56 UTC [DEBUG] Debugging enabled.
-2025-02-08 12:34:56 UTC [ERROR] An error occurred.
-```
+| LCBLog | journald |
+|------|----------|
+| DEBUG | 7 |
+| INFO  | 6 |
+| WARN  | 4 |
+| ERROR | 3 |
+| FATAL | 2 |
 
 ---
 
 ## 📜 License
 
-This project is licensed under the MIT License. See [LICENSE.md](LICENSE.md) for details.
-
----
-
-## 👨‍💻 Author
-
-Lee C. Bussy – [@LBussy](https://github.com/lbussy)
-
-For contributions, bug reports, or feature requests, feel free to open an issue or submit a pull request. 🚀
-
----
-
-## ⭐ Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository.
-2. Create a new feature branch (git checkout -b feature-branch).
-3. Commit changes (git commit -m "Added new feature").
-4. Push the branch (git push origin feature-branch).
-5. Open a pull request.
-
----
-
-🔗 References
-
-- [C++ `std::mutex` Documentation](https://en.cppreference.com/w/cpp/thread/mutex)
-- [GCC Compiler](https://gcc.gnu.org/)
-- [Makefile Documentation](https://www.gnu.org/software/make/manual/make.html)
-- [`cppcheck`](http://cppcheck.sourceforge.net/)
+MIT License.

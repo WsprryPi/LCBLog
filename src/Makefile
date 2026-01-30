@@ -7,6 +7,27 @@ SUDO := #sudo
 # Debug tag
 # DEBUG := -DDEBUG_TCP_SERVER
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Optional journald support (sd-journal.h)
+# - If sd-journal.h is available, link with -lsystemd and define LIB_JOURNALD=1
+# - Otherwise, define LIB_JOURNALD=0 and do not link libsystemd
+# ─────────────────────────────────────────────────────────────────────────────
+
+SYSTEMD_CFLAGS :=
+SYSTEMD_LIBS   :=
+HAVE_JOURNALD  := 0
+
+# Prefer pkg-config for libsystemd, but also allow header-only detection as fallback.
+ifeq ($(shell pkg-config --exists libsystemd 2>/dev/null && echo yes),yes)
+	SYSTEMD_CFLAGS := $(strip $(shell pkg-config --cflags libsystemd 2>/dev/null))
+	SYSTEMD_LIBS   := $(strip $(shell pkg-config --libs   libsystemd 2>/dev/null))
+	HAVE_JOURNALD  := 1
+else ifneq ($(wildcard /usr/include/systemd/sd-journal.h),)
+	# Header exists but pkg-config missing; link with -lsystemd anyway.
+	SYSTEMD_LIBS  := -lsystemd
+	HAVE_JOURNALD := 1
+endif
+
 # Get project name from Git
 #
 # Project name from remote origin URL (fallback to 'unknown' if not available)
@@ -71,11 +92,23 @@ C_RELEASE_FLAGS := $(CFLAGS) -O2					# Release optimized
 
 # C++ Flags
 CXXFLAGS := -Wno-psabi -lstdc++fs -std=c++$(CXXVER)
-CXXFLAGS += $(COMMON_FLAGS) $(COMM_CXX_FLAGS)
+
+# Base compiler flags
+CXXFLAGS := -Wno-psabi -std=c++$(CXXVER) \
+           $(COMMON_FLAGS) \
+		   $(COMM_CXX_FLAGS) \
+           $(PKG_CFLAGS) \
+           $(SYSTEMD_CFLAGS) \
+           -DGPIOD_API_MAJOR=$(GPIOD_API_MAJOR) \
+           -DLIB_JOURNALD=$(HAVE_JOURNALD)
+
 # C++ Debug Flags
 CXX_DEBUG_FLAGS := $(CXXFLAGS) -g $(DEBUG)	# Debug flags
 # C++ Release Flags
 CXX_RELEASE_FLAGS := $(CXXFLAGS) -O2		# Release optimized
+
+# Linker flags
+LDFLAGS += $(SYSTEMD_LIBS)
 
 # Include paths for libraries
 # CXXFLAGS += -I$(abspath ./{folder}/src)

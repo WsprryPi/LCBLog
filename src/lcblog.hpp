@@ -49,6 +49,23 @@
 #include <string>
 #include <thread>
 
+
+/**
+ * @enum LogLevel
+ * @brief Define severity levels for logging.
+ *
+ * This enumeration determines the threshold for message importance
+ * and controls which messages are emitted based on their level.
+ */
+enum LogLevel
+{
+    DEBUG = 0, /**< Debug-level messages for detailed troubleshooting. */
+    INFO,      /**< Informational messages describing normal operation. */
+    WARN,      /**< Warning messages indicating potential issues. */
+    ERROR,     /**< Error messages requiring attention but allowing continued execution. */
+    FATAL      /**< Fatal messages indicating critical errors that terminate the program. */
+};
+
 /**
  * @struct LogEntry
  * @brief Represent a log message and its target output stream.
@@ -67,26 +84,13 @@ struct LogEntry
     {
         Out, /**< Write message to standard output. */
         Err  /**< Write message to error output. */
-    } dest;  /**< Selected destination for this log entry. */
+    } dest; /**< Selected destination for this log entry. */
+
+    LogLevel level; /**< Severity level associated with this entry. */
 
     std::string msg; /**< Formatted text content of the log entry. */
 };
 
-/**
- * @enum LogLevel
- * @brief Define severity levels for logging.
- *
- * This enumeration determines the threshold for message importance
- * and controls which messages are emitted based on their level.
- */
-enum LogLevel
-{
-    DEBUG = 0, /**< Debug-level messages for detailed troubleshooting. */
-    INFO,      /**< Informational messages describing normal operation. */
-    WARN,      /**< Warning messages indicating potential issues. */
-    ERROR,     /**< Error messages requiring attention but allowing continued execution. */
-    FATAL      /**< Fatal messages indicating critical errors that terminate the program. */
-};
 
 /**
  * @brief Converts a log level to its string representation.
@@ -178,6 +182,25 @@ public:
     void enableTimestamps(bool enable);
 
     /**
+     * @brief Enable or disable logging to journald.
+     *
+     * When enabled, log entries are sent via libsystemd instead of
+     * writing to the configured output streams.
+     *
+     * @param enable True to send logs to journald, false to use streams.
+     */
+    void enableJournald(bool enable);
+
+    /**
+     * @brief Set the SYSLOG_IDENTIFIER value for journald logging.
+     *
+     * If empty, libsystemd will use its default identifier.
+     *
+     * @param ident Identifier string (for example "wsprrypi").
+     */
+    void setJournaldIdentifier(const std::string &ident);
+
+    /**
      * @brief Enqueue a formatted log message.
      *
      * This template formats the provided arguments into a single message
@@ -223,7 +246,18 @@ private:
     std::ostream &out;            /**< Stream for non-error messages. */
     std::ostream &err;            /**< Stream for error messages. */
     bool printTimestamps = false; /**< Flag to include timestamps. */
+    std::atomic<bool> useJournald_{false}; /**< Send logs to journald. */
+    std::string journaldIdent_;           /**< SYSLOG_IDENTIFIER override. */
+    std::atomic<bool> backendBannerLogged_{false}; /**< Backend banner logged. */
     std::mutex logMutex;          /**< Protects configuration changes. */
+
+    /**
+     * @brief Emit a one-time banner describing the active logging backend.
+     *
+     * This banner is emitted once per process lifetime and is intended
+     * to help confirm whether logging is going to streams or journald.
+     */
+    void emitBackendBannerIfNeeded_();
 
     /**
      * @brief Sanitize a string by normalizing whitespace and punctuation spacing.
