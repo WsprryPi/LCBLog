@@ -98,6 +98,21 @@ int logLevelToJournaldPriority(LogLevel level)
     }
 }
 
+
+std::string sanitizeJournaldLine(const std::string &line)
+{
+    std::string cleaned = line;
+
+    static const std::regex timestampRe(
+        R"(^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}\s+UTC\t)");
+    cleaned = std::regex_replace(cleaned, timestampRe, "");
+
+    static const std::regex levelPrefixRe(R"(^\[[A-Z]{4,7}\s*\]\s*)");
+    cleaned = std::regex_replace(cleaned, levelPrefixRe, "");
+
+    return cleaned;
+}
+
 #if LCBLOG_HAS_JOURNALD
 void sendToJournald(int priority, const std::string &ident, const std::string &line)
 {
@@ -136,7 +151,7 @@ void sendMessageLinesToJournald(int priority,
         if (end > start)
         {
             std::string line = msg.substr(start, end - start);
-            sendToJournald(priority, ident, line);
+            sendToJournald(priority, ident, sanitizeJournaldLine(line));
         }
 
         if (end == msg.size())

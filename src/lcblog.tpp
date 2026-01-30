@@ -70,7 +70,7 @@ inline void LCBLog::emitBackendBannerIfNeeded_()
     const std::string backend = journaldEnabled ? "journald" : "streams";
 
     std::ostringstream oss;
-    logToStream(oss, LogLevel::INFO, "LCBLog backend:", backend);
+    logToStream(oss, LogLevel::INFO, "Logging backend:", backend);
 
     auto entry = std::make_unique<LogEntry>();
     entry->level = LogLevel::INFO;
