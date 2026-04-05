@@ -406,11 +406,23 @@ void LCBLog::setLogLevel(LogLevel level)
 void LCBLog::enableTimestamps(bool enable)
 {
     std::lock_guard<std::mutex> lock(logMutex);
+    if (useJournald_.load(std::memory_order_acquire))
+    {
+        printTimestamps = false;
+        return;
+    }
+
     printTimestamps = enable;
 }
 
 void LCBLog::enableJournald(bool enable)
 {
+    if (enable)
+    {
+        std::lock_guard<std::mutex> lock(logMutex);
+        printTimestamps = false;
+    }
+
     useJournald_.store(enable && (LCBLOG_HAS_JOURNALD != 0),
                       std::memory_order_release);
     if (useJournald_.load(std::memory_order_acquire))

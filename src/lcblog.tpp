@@ -203,7 +203,7 @@ void LCBLog::logToStream(std::ostream& stream,
         if (!firstLine) {
             stream << std::endl;
         }
-        if (!journaldEnabled && printTimestamps)
+        if (printTimestamps)
         {
             stream << getStamp() << "\t";
         }
@@ -223,7 +223,7 @@ void LCBLog::logToStream(std::ostream& stream,
     // Emit an empty entry if nothing was printed
     if (!printedAny)
     {
-        if (!journaldEnabled && printTimestamps)
+        if (printTimestamps)
         {
             stream << getStamp() << "\t";
         }
