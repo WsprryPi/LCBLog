@@ -98,7 +98,7 @@ int logLevelToJournaldPriority(LogLevel level)
     }
 }
 
-
+[[maybe_unused]]
 std::string sanitizeJournaldLine(const std::string &line)
 {
     std::string cleaned = line;

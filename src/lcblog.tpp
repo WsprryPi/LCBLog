@@ -275,6 +275,19 @@ bool shouldSkipSpace(const PrevT& prevArg, const T& arg)
         return true;
     }
 
+    // Skip after opening delimiters so adjacent quoted/grouped fragments
+    // stay contiguous when callers split messages across log arguments.
+    switch (prev.back()) {
+        case '"':
+        case '\'':
+        case '(':
+        case '[':
+        case '{':
+            return true;
+        default:
+            break;
+    }
+
     // Otherwise, add a space
     return false;
 }
