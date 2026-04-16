@@ -454,6 +454,40 @@ bool LCBLog::shouldLog(LogLevel level) const
 }
 
 /**
+ * @brief Emit a bootstrap diagnostic directly to standard output.
+ *
+ * This helper formats a single diagnostic line using the normal
+ * stream-style prefix and optional timestamp, then writes it
+ * directly to stdout without going through the active log backend.
+ *
+ * @param level Severity level to render in the line prefix.
+ * @param message Diagnostic text to emit.
+ */
+void LCBLog::emitBootstrapDiagnosticToStdout_(LogLevel level,
+                                              const std::string &message)
+{
+    std::ostringstream line;
+    std::string levelStr = ::logLevelToString(level);
+    constexpr int LOG_LEVEL_WIDTH = 5;
+
+    if (levelStr.size() < LOG_LEVEL_WIDTH)
+    {
+        levelStr.append(LOG_LEVEL_WIDTH - levelStr.size(), ' ');
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(logMutex);
+        if (printTimestamps)
+        {
+            line << getStamp() << "\t";
+        }
+    }
+
+    line << "[" << levelStr << "] " << message << std::endl;
+    std::cout << line.str();
+}
+
+/**
  * @brief Generate a UTC timestamp string with millisecond precision.
  *
  * This function retrieves the current system time in UTC, formats it as

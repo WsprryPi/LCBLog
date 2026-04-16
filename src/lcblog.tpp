@@ -59,6 +59,11 @@
  */
 inline void LCBLog::emitBackendBannerIfNeeded_()
 {
+    if (!shouldLog(LogLevel::DEBUG))
+    {
+        return;
+    }
+
     bool expected = false;
     if (!backendBannerLogged_.compare_exchange_strong(
             expected, true, std::memory_order_acq_rel))
@@ -68,24 +73,9 @@ inline void LCBLog::emitBackendBannerIfNeeded_()
 
     const bool journaldEnabled = useJournald_.load(std::memory_order_acquire);
     const std::string backend = journaldEnabled ? "journald" : "streams";
-
-    std::ostringstream oss;
-    logToStream(oss, LogLevel::INFO, "Logging backend:", backend);
-
-    auto entry = std::make_unique<LogEntry>();
-    entry->level = LogLevel::INFO;
-    entry->msg   = std::move(oss.str());
-    entry->dest  = ::LogEntry::Out;
-
-    {
-        std::lock_guard<std::mutex> lock(outMtx_);
-        if (outQueue_.size() >= this->maxQueueSize_)
-        {
-            outQueue_.pop_front();
-        }
-        outQueue_.push_back(std::move(entry));
-    }
-    outCv_.notify_one();
+    emitBootstrapDiagnosticToStdout_(
+        LogLevel::DEBUG,
+        std::string("Logging backend: ") + backend);
 }
 
 /**

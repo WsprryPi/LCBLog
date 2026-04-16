@@ -266,6 +266,19 @@ private:
     void emitBackendBannerIfNeeded_();
 
     /**
+     * @brief Emit a bootstrap diagnostic directly to standard output.
+     *
+     * This helper bypasses the configured logging backend so that
+     * internal self-diagnostic messages can always be observed on
+     * stdout without affecting routing for normal log traffic.
+     *
+     * @param level Severity level to render in the message prefix.
+     * @param message Diagnostic text to emit.
+     */
+    void emitBootstrapDiagnosticToStdout_(LogLevel level,
+                                          const std::string &message);
+
+    /**
      * @brief Sanitize a string by normalizing whitespace and punctuation spacing.
      *
      * This method trims leading and trailing whitespace, collapses consecutive
