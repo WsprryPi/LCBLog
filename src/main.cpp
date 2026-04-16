@@ -237,7 +237,7 @@ void testMixedDataTypes()
 {
     std::cout << "Running testMixedDataTypes()." << std::endl;
 
-    llog.logS(INFO, "Test start:", 42, "is an int,", 3.14159, "is Pi,", -7.25,
+    llog.logS(INFO, "Test start: ", 42, "is an int,", 3.14159, "is Pi,", -7.25,
               "is negative,", "true", "is a bool,", nullptr, "is null,",
               "this", "should", "have", "spaces.", "(Parentheses)",
               "[Brackets]", "{Braces}", "\"Quotes\"", "'Single quotes'",
