@@ -57,6 +57,37 @@
  * This banner is emitted once per process lifetime and is intended
  * to help confirm whether logging is going to streams or journald.
  */
+inline void LCBLog::emitBootstrapDiagnosticToStdout_(
+    LogLevel level,
+    const std::string &message)
+{
+    std::ostringstream line;
+    std::string levelStr = ::logLevelToString(level);
+    constexpr int LOG_LEVEL_WIDTH = 5;
+
+    if (levelStr.size() < LOG_LEVEL_WIDTH)
+    {
+        levelStr.append(LOG_LEVEL_WIDTH - levelStr.size(), ' ');
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(logMutex);
+        if (printTimestamps)
+        {
+            line << getStamp() << "\t";
+        }
+    }
+
+    line << "[" << levelStr << "] " << message << std::endl;
+    std::cout << line.str();
+}
+
+/**
+ * @brief Emit a one-time banner describing the active logging backend.
+ *
+ * This banner is emitted once per process lifetime and is intended
+ * to help confirm whether logging is going to streams or journald.
+ */
 inline void LCBLog::emitBackendBannerIfNeeded_()
 {
     if (!shouldLog(LogLevel::DEBUG))
